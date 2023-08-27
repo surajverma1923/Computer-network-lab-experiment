@@ -1,58 +1,76 @@
-#include "stdio.h"
-#include "stdlib.h"
-#include "string.h"
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <arpa/inet.h>
 #include <unistd.h>
-#include "netdb.h"
-#include "arpa/inet.h"
+#define SIZE 1024
 
-#define MAX 1000
-#define BACKLOG 5 // how many pending connections queue will hold
+void write_file(int sockfd) {
+    int n;
+    FILE *fp;
+    char *filename = "recv.txt";
+    char buffer[SIZE];
+
+    fp = fopen(filename, "w");
+    if (fp == NULL) {
+        perror("[-]Error in opening file for writing.");
+        exit(1);
+    }
+    
+    while (1) {
+        n = recv(sockfd, buffer, SIZE, 0);
+        if (n <= 0) {
+            break;
+        }
+        fprintf(fp, "%.*s", n, buffer); // Print only the received bytes
+        bzero(buffer, SIZE);
+    }
+    fclose(fp);
+}
 
 int main() {
-    char serverMessage[MAX];
-    char clientMessage[MAX];
-    
-    // create the server socket
-    int socketDescriptor = socket(AF_INET, SOCK_STREAM, 0);
+    char *ip = "127.0.0.1";
+    int port = 8080;
+    int e;
 
-    struct sockaddr_in serverAddress;
-    serverAddress.sin_family = AF_INET;
-    serverAddress.sin_port = htons(9002);
-    serverAddress.sin_addr.s_addr = INADDR_ANY;
+    int sockfd, new_sock;
+    struct sockaddr_in server_addr, new_addr;
+    socklen_t addr_size;
 
-    // calling bind function to our specified IP and port
-    bind(socketDescriptor, (struct sockaddr*)&serverAddress, sizeof(serverAddress));
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) {
+        perror("[-]Error in socket");
+        exit(1);
+    }
+    printf("[+]Server socket created successfully.\n");
 
-    listen(socketDescriptor, BACKLOG);
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(port);
+    server_addr.sin_addr.s_addr = inet_addr(ip);
 
-    // starting the accepting
-    int clientSocketDescriptor = accept(socketDescriptor, NULL, NULL);
+    e = bind(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+    if (e < 0) {
+        perror("[-]Error in bind");
+        exit(1);
+    }
+    printf("[+]Binding successful.\n");
 
-    while (1) {
-        printf("\ntext message here ... :");
-
-        // Use fgets instead of scanf to read an entire line, including spaces
-        if (fgets(serverMessage, sizeof(serverMessage), stdin) == NULL) {
-            perror("fgets");
-            break; // Exit the loop on input error
-        }
-
-        // Remove the newline character from the input
-        serverMessage[strlen(serverMessage) - 1] = '\0';
-
-        send(clientSocketDescriptor, serverMessage, sizeof(serverMessage), 0);
-
-        // receive the data from the client
-        recv(clientSocketDescriptor, clientMessage, sizeof(clientMessage), 0);
-
-        // received data from the client successfully, then print the data obtained from the client
-        printf("\nCLIENT: %s", clientMessage);
+    if (listen(sockfd, 10) == 0) {
+        printf("[+]Listening....\n");
+    } else {
+        perror("[-]Error in listening");
+        exit(1);
     }
 
-    // close the socket
-    close(socketDescriptor);
+    addr_size = sizeof(new_addr);
+    new_sock = accept(sockfd, (struct sockaddr *)&new_addr, &addr_size);
+    printf("[+]Connection accepted from %s:%d\n", inet_ntoa(new_addr.sin_addr), ntohs(new_addr.sin_port));
+    
+    write_file(new_sock);
+    printf("[+]Data written to the file successfully.\n");
+
+    close(new_sock); // Close the accepted socket
+    close(sockfd);   // Close the server socket
+
     return 0;
 }

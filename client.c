@@ -1,68 +1,63 @@
-#include "stdio.h"
-#include "stdlib.h"
-#include "string.h"
-//headers for socket and related functions
-#include <sys/types.h>
-#include <sys/socket.h>
-//for including structures which will store information needed
-#include <netinet/in.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
-//for gethostbyname
-#include "netdb.h"
-#include "arpa/inet.h"
+#include <string.h>
+#include <arpa/inet.h>
 
-//defines
-#define h_addr h_addr_list[0] /* for backward compatibility */
+#define SIZE 1024
 
-#define PORT 9002 // port number
-#define MAX 1000  //maximum buffer size
+void send_file(FILE *fp, int sockfd) {
+    int n;
+    char data[SIZE] = {0};
 
-//main function
-int main(){
-    char serverResponse[MAX];
-    char clientResponse[MAX];
-
-    //creating a socket
-    int socketDescriptor = socket(AF_INET, SOCK_STREAM, 0);
-
-    //placeholder for the hostname and my ip address
-    char hostname[MAX], ipaddress[MAX];
-struct hostent *hostIP; //placeholder for the ip address
-//if the gethostname returns a name then the program will get the ip address
-if(gethostname(hostname,sizeof(hostname))==0){
-    hostIP = gethostbyname(hostname);//the netdb.h fucntion gethostbyname
-}else{
-printf("ERROR:FCC4539 IP Address Not ");
+    while (fgets(data, SIZE, fp) != NULL) {
+        if (send(sockfd, data, strlen(data), 0) == -1) { // Use strlen(data) instead of sizeof(data)
+            perror("[-]Error in sending file.");
+            exit(1);
+        }
+        bzero(data, SIZE);
+    }
 }
 
-struct sockaddr_in serverAddress;
-serverAddress.sin_family = AF_INET;
-serverAddress.sin_port = htons(PORT);
-serverAddress.sin_addr.s_addr = INADDR_ANY; 
+int main() {
+    char *ip = "127.0.0.1";
+    int port = 8080;
+    int e;
 
-connect(socketDescriptor, (struct sockaddr *)&serverAddress, sizeof(serverAddress));
+    int sockfd;
+    struct sockaddr_in server_addr;
+    FILE *fp;
+    char *filename = "send.txt";
 
-// getting the address port and remote host
-    printf("\nLocalhost: %s\n", inet_ntoa(*(struct in_addr*)hostIP->h_addr));
-    printf("Local Port: %d\n", PORT);
-    printf("Remote Host: %s\n", inet_ntoa(serverAddress.sin_addr));
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) {
+        perror("[-]Error in socket");
+        exit(1);
+    }
+    printf("[+]Server socket created successfully.\n");
 
-    while (1)
-    {   //recieve the data from the server
-        recv(socketDescriptor, serverResponse, sizeof(serverResponse), 0);
-            //recieved data from the server successfully then printing the data obtained from the server
-            printf("\nSERVER : %s", serverResponse);
-        
-    printf("\ntext message here... :");
-    if (scanf("%s", clientResponse) != 1) {
-    printf("Error reading input.\n");
-    break; // Exit the loop if input reading fails
-}
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(port); // Use htons to convert port to network byte order
+    server_addr.sin_addr.s_addr = inet_addr(ip);
 
-    send(socketDescriptor, clientResponse, sizeof(clientResponse), 0);
+    e = connect(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+    if (e == -1) {
+        perror("[-]Error in connecting to server"); // Update error message
+        exit(1);
+    }
+    printf("[+]Connected to Server.\n");
+
+    fp = fopen(filename, "r");
+    if (fp == NULL) {
+        perror("[-]Error in opening file."); // Update error message
+        exit(1);
     }
 
-    //closing the socket
-    close(socketDescriptor);
+    send_file(fp, sockfd);
+    printf("[+]File data sent successfully.\n");
+
+    printf("[+]Closing the connection.\n");
+    close(sockfd);
+
     return 0;
 }
